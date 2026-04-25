@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sentinel SOC - Behavioral Analytics &amp; XAI</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            vertical-align: middle;
+        }
+        body {
+            background-color: #101319;
+            color: #e1e2eb;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+        .glass-panel {
+            background: rgba(39, 42, 49, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .glow-border-primary {
+            box-shadow: 0 0 8px rgba(0, 209, 255, 0.2);
+        }
+    </style>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            "colors": {
+                    "on-secondary": "#053900",
+                    "error": "#ffb4ab",
+                    "on-primary-container": "#00566a",
+                    "on-primary-fixed-variant": "#004e60",
+                    "on-primary-fixed": "#001f28",
+                    "on-tertiary": "#690006",
+                    "surface-container-high": "#272a31",
+                    "inverse-on-surface": "#2e3037",
+                    "secondary-fixed-dim": "#2ae500",
+                    "surface-container-low": "#191c22",
+                    "tertiary": "#ffd2cd",
+                    "on-background": "#e1e2eb",
+                    "primary-fixed-dim": "#4cd6ff",
+                    "surface-variant": "#32353c",
+                    "surface": "#101319",
+                    "error-container": "#93000a",
+                    "inverse-primary": "#00677f",
+                    "on-secondary-fixed": "#022100",
+                    "secondary-container": "#2ff801",
+                    "surface-bright": "#363940",
+                    "surface-dim": "#101319",
+                    "on-tertiary-container": "#a2000f",
+                    "outline-variant": "#3c494e",
+                    "tertiary-fixed": "#ffdad6",
+                    "inverse-surface": "#e1e2eb",
+                    "secondary": "#d7ffc5",
+                    "surface-tint": "#4cd6ff",
+                    "outline": "#859399",
+                    "on-tertiary-fixed": "#410002",
+                    "on-tertiary-fixed-variant": "#93000c",
+                    "surface-container-lowest": "#0b0e14",
+                    "on-error": "#690005",
+                    "on-secondary-fixed-variant": "#095300",
+                    "primary-fixed": "#b7eaff",
+                    "tertiary-fixed-dim": "#ffb4ab",
+                    "secondary-fixed": "#79ff5b",
+                    "on-error-container": "#ffdad6",
+                    "tertiary-container": "#ffaba2",
+                    "primary-container": "#00d1ff",
+                    "primary": "#a4e6ff",
+                    "surface-container": "#1d2026",
+                    "on-primary": "#003543",
+                    "surface-container-highest": "#32353c",
+                    "background": "#101319",
+                    "on-secondary-container": "#0f6d00",
+                    "on-surface": "#e1e2eb",
+                    "on-surface-variant": "#bbc9cf"
+            },
+            "borderRadius": {
+                    "DEFAULT": "0.125rem",
+                    "lg": "0.25rem",
+                    "xl": "0.5rem",
+                    "full": "0.75rem"
+            },
+            "fontFamily": {
+                    "headline": ["Inter"],
+                    "body": ["Space Grotesk"],
+                    "label": ["Space Grotesk"]
+            }
+          },
+        },
+      }
+    </script>
+</head>
+<body class="flex min-h-screen">
+<!-- SideNavBar (Authority: JSON) -->
+<aside class="fixed left-0 top-0 h-screen flex flex-col py-8 bg-[#191c22] w-20 z-50">
+<div class="flex flex-col items-center gap-10 h-full">
+<div class="mb-4">
+<img alt="Sentinel Logo" class="w-10 h-10 grayscale brightness-150" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCmOqgbYqxK0ocHYurY8tjaZhSb993PaGpcYrTXuDYLh4w_kYGOlGQ4BdDA58Fl22RHTuxp2ZjUAO6wMrRfSdGYHNeREVf1ZU84TTPFNuo54e3_eHHOgKPnx3HCiBxP9FelFqhl33sC5Zt_Z02hkxrhJeZpWHRr8TWcvFjrNAm8Chzl5UkDCFQPTLkrzLK4-5yR_hAMVMZNO-SC4hQ9o1u8bUmuWdAbbzDMB69U-8qS9kugaSwa7OIKNXwFnVLk3ovX0UoaxyLtXgGE"/>
+</div>
+<nav class="flex flex-col gap-8 w-full">
+<!-- Overview -->
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 transition-all duration-300 cursor-pointer py-2">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="font-['Space_Grotesk'] text-[0.6875rem] uppercase tracking-widest mt-1">Overview</span>
+</div>
+<!-- Behavioral (ACTIVE) -->
+<div class="relative flex flex-col items-center justify-center text-[#00D1FF] before:content-[''] before:absolute before:left-0 before:w-1 before:h-6 before:bg-[#00D1FF] before:shadow-[0_0_8px_#00D1FF] cursor-pointer py-2">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="font-['Space_Grotesk'] text-[0.6875rem] uppercase tracking-widest mt-1">Behavioral</span>
+</div>
+<!-- Geospatial -->
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 transition-all duration-300 cursor-pointer py-2">
+<span class="material-symbols-outlined" data-icon="public">public</span>
+<span class="font-['Space_Grotesk'] text-[0.6875rem] uppercase tracking-widest mt-1">Geospatial</span>
+</div>
+<!-- Incidents -->
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 transition-all duration-300 cursor-pointer py-2">
+<span class="material-symbols-outlined" data-icon="emergency">emergency</span>
+<span class="font-['Space_Grotesk'] text-[0.6875rem] uppercase tracking-widest mt-1">Incidents</span>
+</div>
+</nav>
+<div class="mt-auto flex flex-col gap-6 w-full">
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] cursor-pointer">
+<span class="material-symbols-outlined" data-icon="list_alt">list_alt</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] cursor-pointer">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+</div>
+</div>
+</div>
+</aside>
+<!-- Main Content Area -->
+<main class="ml-20 flex-1 flex flex-col min-h-screen">
+<!-- TopNavBar (Authority: JSON) -->
+<header class="flex justify-between items-center w-full px-6 h-16 bg-[#101319] sticky top-0 z-40">
+<div class="flex items-center gap-8">
+<span class="text-lg font-bold text-[#e1e2eb] tracking-tighter font-['Inter']">Sentinel SOC</span>
+<div class="relative">
+<span class="absolute left-3 top-1/2 -translate-y-1/2 material-symbols-outlined text-on-surface-variant text-sm">search</span>
+<input class="bg-[#191c22] border-none text-sm font-['Inter'] py-1.5 pl-10 pr-4 w-64 focus:ring-1 focus:ring-[#00D1FF] transition-all" placeholder="Search User ID, Hash, or IP..." type="text"/>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 px-3 py-1 bg-on-secondary-container/10 border border-on-secondary-container/20 rounded-sm">
+<span class="w-2 h-2 rounded-full bg-secondary-fixed shadow-[0_0_8px_#2ff801]"></span>
+<span class="text-[0.6875rem] font-semibold text-secondary-fixed tracking-widest uppercase">System Status: SECURE</span>
+</div>
+<div class="flex items-center gap-4 text-[#e1e2eb]/60">
+<span class="material-symbols-outlined cursor-pointer hover:text-[#00D1FF]">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-[#00D1FF]">settings</span>
+<div class="w-8 h-8 rounded-full overflow-hidden border border-outline-variant">
+<img class="w-full h-full object-cover" data-alt="Security Analyst Profile photo avatar close-up professional lighting" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCLrzcpOvjhANI03RBv4wC0CQdXNKbVjEEKg8Oq-NCKf8aWCQtyOMsov75GbKfIrTfTI8tz_l1bBAStvg3FIKgBY5-Gxsx9wncVEqQ0m6ev7K3MoqobvCKFSOGSLzLm8H9QhT9eoaYBYPrO-yrc9orVdvZgoYvhVpoWJiFw8560ignO77uHqsTPqF_mXBFqfum6Uj-XBDRFdAyrez5b06GkWpCpcMwUAg80aVQIR4SBOrqiUJkQVOtwC1xt9xN8ExyoXzVTC93n21oA"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Canvas Content -->
+<section class="p-6 grid grid-cols-12 gap-6 overflow-hidden">
+<!-- Left Sidebar: User Selection -->
+<div class="col-span-12 lg:col-span-3 flex flex-col gap-4">
+<div class="bg-surface-container-low p-4">
+<div class="flex items-center justify-between mb-6">
+<h2 class="font-headline font-bold text-sm tracking-tight uppercase text-on-surface-variant">Active Investigations</h2>
+<span class="material-symbols-outlined text-on-primary-container text-lg">filter_list</span>
+</div>
+<div class="flex flex-col gap-2">
+<!-- User Item (Selected) -->
+<div class="p-3 bg-surface-container-high border-l-2 border-primary-container flex items-center gap-3 cursor-pointer group">
+<div class="w-10 h-10 bg-surface-variant flex items-center justify-center">
+<span class="material-symbols-outlined text-primary">person</span>
+</div>
+<div class="flex-1">
+<div class="text-xs font-bold text-on-surface">USR-8842-AX</div>
+<div class="text-[0.625rem] text-on-surface-variant uppercase">Retail Manager • Store #402</div>
+</div>
+<div class="text-right">
+<div class="text-xs font-bold text-error">88</div>
+<div class="text-[0.5rem] text-on-surface-variant">RISK</div>
+</div>
+</div>
+<!-- Other Users -->
+<div class="p-3 bg-surface-container-low hover:bg-surface-container-high flex items-center gap-3 cursor-pointer group transition-colors">
+<div class="w-10 h-10 bg-surface-variant/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant">person</span>
+</div>
+<div class="flex-1">
+<div class="text-xs font-bold text-on-surface">USR-1190-KL</div>
+<div class="text-[0.625rem] text-on-surface-variant uppercase">Inventory Lead • Region 5</div>
+</div>
+<div class="text-right">
+<div class="text-xs font-bold text-secondary-fixed">14</div>
+<div class="text-[0.5rem] text-on-surface-variant">RISK</div>
+</div>
+</div>
+<div class="p-3 bg-surface-container-low hover:bg-surface-container-high flex items-center gap-3 cursor-pointer group transition-colors">
+<div class="w-10 h-10 bg-surface-variant/40 flex items-center justify-center">
+<span class="material-symbols-outlined text-on-surface-variant">person</span>
+</div>
+<div class="flex-1">
+<div class="text-xs font-bold text-on-surface">USR-2241-TQ</div>
+<div class="text-[0.625rem] text-on-surface-variant uppercase">Shift Supervisor • Store #112</div>
+</div>
+<div class="text-right">
+<div class="text-xs font-bold text-tertiary">42</div>
+<div class="text-[0.5rem] text-on-surface-variant">RISK</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Feature Importance (XAI SHAP/LIME) -->
+<div class="bg-surface-container-low p-4 flex-1">
+<div class="flex items-center gap-2 mb-4 group cursor-help">
+<h2 class="font-headline font-bold text-sm tracking-tight uppercase text-on-surface-variant">Feature Importance</h2>
+<span class="material-symbols-outlined text-xs text-on-surface-variant/50">info</span>
+<!-- Tooltip Mockup -->
+<div class="hidden group-hover:block absolute z-50 bg-surface-container-highest p-2 text-[0.625rem] w-48 border border-outline-variant mt-12">
+                            SHAP values indicate how much each feature contributed to the current risk score deviation.
+                        </div>
+</div>
+<div class="flex flex-col gap-4">
+<div class="space-y-1">
+<div class="flex justify-between text-[0.625rem] uppercase tracking-wider text-on-surface-variant">
+<span>Data Exfiltration Vol</span>
+<span class="text-error font-bold">+0.42</span>
+</div>
+<div class="h-1.5 bg-surface-variant w-full overflow-hidden">
+<div class="h-full bg-error" style="width: 82%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[0.625rem] uppercase tracking-wider text-on-surface-variant">
+<span>Off-Hours Access</span>
+<span class="text-error font-bold">+0.28</span>
+</div>
+<div class="h-1.5 bg-surface-variant w-full overflow-hidden">
+<div class="h-full bg-error" style="width: 55%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[0.625rem] uppercase tracking-wider text-on-surface-variant">
+<span>POS Void Ratio</span>
+<span class="text-error font-bold">+0.15</span>
+</div>
+<div class="h-1.5 bg-surface-variant w-full overflow-hidden">
+<div class="h-full bg-error" style="width: 30%"></div>
+</div>
+</div>
+<div class="space-y-1">
+<div class="flex justify-between text-[0.625rem] uppercase tracking-wider text-on-surface-variant">
+<span>Concurrent Sessions</span>
+<span class="text-secondary-fixed font-bold">-0.08</span>
+</div>
+<div class="h-1.5 bg-surface-variant w-full overflow-hidden flex justify-end">
+<div class="h-full bg-secondary-fixed" style="width: 15%"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Right Area: Main Dashboard -->
+<div class="col-span-12 lg:col-span-9 flex flex-col gap-6">
+<!-- Temporal Rhythm Heatmap -->
+<div class="bg-surface-container-low p-5">
+<div class="flex items-center justify-between mb-6">
+<div>
+<h2 class="font-headline font-bold text-sm tracking-tight uppercase text-on-surface">Temporal Rhythm Analysis</h2>
+<p class="text-[0.6875rem] text-on-surface-variant uppercase tracking-tighter">24-Hour activity mapping vs Store Baseline</p>
+</div>
+<div class="flex items-center gap-3">
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 bg-surface-variant"></span>
+<span class="text-[0.625rem] text-on-surface-variant uppercase">Normal</span>
+</div>
+<div class="flex items-center gap-1.5">
+<span class="w-2 h-2 bg-error"></span>
+<span class="text-[0.625rem] text-on-surface-variant uppercase">Anomaly</span>
+</div>
+</div>
+</div>
+<!-- Heatmap Grid -->
+<div class="grid grid-cols-24 gap-1 h-32">
+<!-- Hour blocks generated manually for 24 hours -->
+<div class="bg-surface-variant/20 hover:bg-primary/20 transition-colors cursor-pointer relative group"><div class="hidden group-hover:block absolute bottom-full mb-2 bg-surface-container-highest p-1 text-[0.5rem] whitespace-nowrap">00:00 - Low Activity</div></div>
+<div class="bg-surface-variant/20"></div>
+<div class="bg-surface-variant/20"></div>
+<div class="bg-error/30 border border-error/50 relative">
+<div class="absolute inset-0 flex items-center justify-center"><span class="text-[0.5rem] font-bold text-error">!</span></div>
+</div>
+<div class="bg-error/60 border border-error/80"></div>
+<div class="bg-surface-variant/20"></div>
+<div class="bg-surface-variant/20"></div>
+<div class="bg-surface-variant/40"></div>
+<div class="bg-primary/40"></div>
+<div class="bg-primary/60"></div>
+<div class="bg-primary/50"></div>
+<div class="bg-primary/40"></div>
+<div class="bg-surface-variant/60"></div>
+<div class="bg-surface-variant/40"></div>
+<div class="bg-primary/20"></div>
+<div class="bg-surface-variant/40"></div>
+<div class="bg-surface-variant/50"></div>
+<div class="bg-surface-variant/60"></div>
+<div class="bg-primary/30"></div>
+<div class="bg-surface-variant/20"></div>
+<div class="bg-surface-variant/10"></div>
+<div class="bg-surface-variant/10"></div>
+<div class="bg-surface-variant/10"></div>
+<div class="bg-surface-variant/10"></div>
+</div>
+<div class="flex justify-between mt-2 text-[0.625rem] text-on-surface-variant/60 font-mono">
+<span>00h</span>
+<span>04h</span>
+<span>08h</span>
+<span>12h</span>
+<span>16h</span>
+<span>20h</span>
+<span>23h</span>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-6">
+<!-- Retail POS Guard Section -->
+<div class="bg-surface-container-low p-5 col-span-2 md:col-span-1 border-l border-error/20">
+<div class="flex items-center gap-3 mb-6">
+<span class="material-symbols-outlined text-error" data-icon="point_of_sale">point_of_sale</span>
+<h2 class="font-headline font-bold text-sm tracking-tight uppercase text-on-surface">Retail POS Guard</h2>
+</div>
+<div class="grid grid-cols-3 gap-4 mb-8">
+<div class="bg-surface-container-high p-3">
+<div class="text-[0.625rem] text-on-surface-variant uppercase mb-1">Voids</div>
+<div class="text-xl font-headline font-bold text-error">12%</div>
+<div class="text-[0.5rem] text-error/60">↑ 8% vs Avg</div>
+</div>
+<div class="bg-surface-container-high p-3">
+<div class="text-[0.625rem] text-on-surface-variant uppercase mb-1">Discounts</div>
+<div class="text-xl font-headline font-bold text-on-surface">4%</div>
+<div class="text-[0.5rem] text-on-surface-variant">Nominal</div>
+</div>
+<div class="bg-surface-container-high p-3">
+<div class="text-[0.625rem] text-on-surface-variant uppercase mb-1">Cash Back</div>
+<div class="text-xl font-headline font-bold text-tertiary">3x</div>
+<div class="text-[0.5rem] text-tertiary/60">Limit Trigger</div>
+</div>
+</div>
+<div class="space-y-4">
+<div class="flex items-center gap-3">
+<div class="w-1 bg-error h-8"></div>
+<div>
+<div class="text-xs font-bold">Multiple Voids - Post Transaction</div>
+<div class="text-[0.625rem] text-on-surface-variant uppercase">Detected at 03:42 AM • Lane 04</div>
+</div>
+</div>
+<div class="flex items-center gap-3">
+<div class="w-1 bg-on-surface-variant/20 h-8"></div>
+<div>
+<div class="text-xs font-bold text-on-surface-variant">Manager Override Bypass</div>
+<div class="text-[0.625rem] text-on-surface-variant uppercase">Policy Violation • Credentials Leaked?</div>
+</div>
+</div>
+</div>
+</div>
+<!-- Behavior Baseline Comparison -->
+<div class="bg-surface-container-low p-5 col-span-2 md:col-span-1">
+<h2 class="font-headline font-bold text-sm tracking-tight uppercase text-on-surface mb-6">Peer Group Baseline</h2>
+<div class="relative h-48 flex items-end justify-between px-4">
+<!-- Visual Chart representation using divs -->
+<div class="w-8 bg-surface-variant/30 h-32 relative">
+<div class="absolute bottom-0 w-full bg-primary/40 h-24"></div>
+<div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[0.5rem] text-on-surface-variant whitespace-nowrap">NETWORK</div>
+</div>
+<div class="w-8 bg-surface-variant/30 h-40 relative">
+<div class="absolute bottom-0 w-full bg-primary/40 h-20"></div>
+<div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[0.5rem] text-on-surface-variant whitespace-nowrap">FILES</div>
+</div>
+<div class="w-8 bg-surface-variant/30 h-24 relative">
+<div class="absolute bottom-0 w-full bg-error/60 h-44"></div>
+<div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[0.5rem] text-on-surface-variant whitespace-nowrap">POS OPS</div>
+</div>
+<div class="w-8 bg-surface-variant/30 h-36 relative">
+<div class="absolute bottom-0 w-full bg-primary/40 h-28"></div>
+<div class="absolute -bottom-6 left-1/2 -translate-x-1/2 text-[0.5rem] text-on-surface-variant whitespace-nowrap">LOGINS</div>
+</div>
+<!-- Legend/Key -->
+<div class="absolute top-0 right-0 space-y-2">
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 bg-surface-variant/30"></span>
+<span class="text-[0.5rem] text-on-surface-variant uppercase">Max Peer</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 bg-primary/40"></span>
+<span class="text-[0.5rem] text-on-surface-variant uppercase">Subject</span>
+</div>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 bg-error/60"></span>
+<span class="text-[0.5rem] text-on-surface-variant uppercase">Critical Dev.</span>
+</div>
+</div>
+</div>
+</div>
+</div>
+<!-- XAI Narrative Feed -->
+<div class="bg-surface-container-low p-5 border-t border-primary-container/10">
+<h2 class="font-headline font-bold text-sm tracking-tight uppercase text-on-surface mb-4">Investigative Narrative (AI-Generated)</h2>
+<div class="flex gap-4">
+<div class="w-10 h-10 rounded-full bg-primary-container/10 flex items-center justify-center shrink-0">
+<span class="material-symbols-outlined text-primary text-xl" style="font-variation-settings: 'FILL' 1;">smart_toy</span>
+</div>
+<div class="space-y-3 text-sm leading-relaxed">
+<p class="text-on-surface">Subject <span class="text-primary font-bold">USR-8842-AX</span> displays a pattern consistent with <span class="underline decoration-error underline-offset-4 font-semibold">Insider Threat (Fraud)</span>. Anomalous POS activity occurred 2 hours before official store opening. The 12% void ratio is 3.4 standard deviations above the regional manager average. No corresponding physical security logs for entrance detected, suggesting remote access via <span class="bg-surface-variant px-1 font-mono text-xs">VPN-Gateway-02</span>.</p>
+<div class="flex gap-4">
+<button class="text-[0.625rem] font-bold uppercase tracking-widest text-primary hover:bg-primary/10 px-3 py-1 border border-primary/20 transition-all">Freeze Credentials</button>
+<button class="text-[0.625rem] font-bold uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all">Flag for Review</button>
+<button class="text-[0.625rem] font-bold uppercase tracking-widest text-on-surface-variant hover:text-on-surface transition-all">Open Full Log Stream</button>
+</div>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Bottom Status Bar (Hybrid) -->
+<footer class="h-8 bg-surface-container-lowest flex items-center px-6 justify-between border-t border-outline-variant/10">
+<div class="flex items-center gap-4 text-[0.625rem] uppercase tracking-widest text-on-surface-variant/60">
+<div class="flex items-center gap-1"><span class="w-1.5 h-1.5 bg-secondary-fixed rounded-full"></span> ENGINE: OPTIMIZED</div>
+<div class="flex items-center gap-1"><span class="w-1.5 h-1.5 bg-primary rounded-full"></span> ML MODEL: UEBA-V4.2</div>
+</div>
+<div class="text-[0.625rem] font-mono text-on-surface-variant/40">
+                SESSION_TOKEN: 0x9f2a_4811_b00c
+            </div>
+</footer>
+</main>
+</body></html>

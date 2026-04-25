@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Sentinel SOC - Geospatial &amp; Infrastructure Mapping</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&amp;family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #101319;
+            color: #e1e2eb;
+            overflow: hidden;
+        }
+        .glass-panel {
+            background: rgba(39, 42, 49, 0.6);
+            backdrop-filter: blur(20px);
+        }
+        .glow-path {
+            filter: drop-shadow(0 0 4px #ff3131);
+        }
+        .glow-node {
+            box-shadow: 0 0 12px #00d1ff;
+        }
+    </style>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    "colors": {
+                        "on-secondary": "#053900",
+                        "error": "#ffb4ab",
+                        "on-primary-container": "#00566a",
+                        "on-primary-fixed-variant": "#004e60",
+                        "on-primary-fixed": "#001f28",
+                        "on-tertiary": "#690006",
+                        "surface-container-high": "#272a31",
+                        "inverse-on-surface": "#2e3037",
+                        "secondary-fixed-dim": "#2ae500",
+                        "surface-container-low": "#191c22",
+                        "tertiary": "#ffd2cd",
+                        "on-background": "#e1e2eb",
+                        "primary-fixed-dim": "#4cd6ff",
+                        "surface-variant": "#32353c",
+                        "surface": "#101319",
+                        "error-container": "#93000a",
+                        "inverse-primary": "#00677f",
+                        "on-secondary-fixed": "#022100",
+                        "secondary-container": "#2ff801",
+                        "surface-bright": "#363940",
+                        "surface-dim": "#101319",
+                        "on-tertiary-container": "#a2000f",
+                        "outline-variant": "#3c494e",
+                        "tertiary-fixed": "#ffdad6",
+                        "inverse-surface": "#e1e2eb",
+                        "secondary": "#d7ffc5",
+                        "surface-tint": "#4cd6ff",
+                        "outline": "#859399",
+                        "on-tertiary-fixed": "#410002",
+                        "on-tertiary-fixed-variant": "#93000c",
+                        "surface-container-lowest": "#0b0e14",
+                        "on-error": "#690005",
+                        "on-secondary-fixed-variant": "#095300",
+                        "primary-fixed": "#b7eaff",
+                        "tertiary-fixed-dim": "#ffb4ab",
+                        "secondary-fixed": "#79ff5b",
+                        "on-error-container": "#ffdad6",
+                        "tertiary-container": "#ffaba2",
+                        "primary-container": "#00d1ff",
+                        "primary": "#a4e6ff",
+                        "surface-container": "#1d2026",
+                        "on-primary": "#003543",
+                        "surface-container-highest": "#32353c",
+                        "background": "#101319",
+                        "on-secondary-container": "#0f6d00",
+                        "on-surface": "#e1e2eb",
+                        "on-surface-variant": "#bbc9cf"
+                    },
+                    "borderRadius": {
+                        "DEFAULT": "0.125rem",
+                        "lg": "0.25rem",
+                        "xl": "0.5rem",
+                        "full": "0.75rem"
+                    },
+                    "fontFamily": {
+                        "headline": ["Inter"],
+                        "body": ["Space Grotesk"],
+                        "label": ["Space Grotesk"]
+                    }
+                },
+            },
+        }
+    </script>
+</head>
+<body class="font-body">
+<!-- SideNavBar (Authority: JSON) -->
+<nav class="fixed left-0 top-0 h-screen flex flex-col py-8 bg-[#191c22] w-20 z-50 transition-all duration-300">
+<div class="flex flex-col items-center mb-10">
+<div class="w-10 h-10 bg-primary-container/20 rounded-lg flex items-center justify-center">
+<span class="material-symbols-outlined text-primary-container" style="font-variation-settings: 'FILL' 1;">security</span>
+</div>
+<div class="mt-2 text-[10px] font-headline font-bold text-on-surface-variant tracking-tighter uppercase">Sentinel</div>
+</div>
+<div class="flex-1 flex flex-col gap-8">
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 py-3 transition-all duration-300 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="dashboard">dashboard</span>
+<span class="text-[0.6875rem] uppercase tracking-widest mt-1">Overview</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 py-3 transition-all duration-300 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="psychology">psychology</span>
+<span class="text-[0.6875rem] uppercase tracking-widest mt-1">Behavioral</span>
+</div>
+<!-- Active State Logic: Geospatial -->
+<div class="relative flex flex-col items-center justify-center text-[#00D1FF] before:content-[''] before:absolute before:left-0 before:w-1 before:h-6 before:bg-[#00D1FF] before:shadow-[0_0_8px_#00D1FF] py-3 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="public">public</span>
+<span class="text-[0.6875rem] uppercase tracking-widest mt-1">Geospatial</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 py-3 transition-all duration-300 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="emergency">emergency</span>
+<span class="text-[0.6875rem] uppercase tracking-widest mt-1">Incidents</span>
+</div>
+</div>
+<div class="mt-auto flex flex-col gap-6">
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 py-2 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="list_alt">list_alt</span>
+<span class="text-[0.6875rem] uppercase tracking-widest mt-1">Logs</span>
+</div>
+<div class="flex flex-col items-center justify-center text-[#9ca3af] hover:text-[#e1e2eb] hover:bg-[#272a31]/50 py-2 cursor-pointer">
+<span class="material-symbols-outlined" data-icon="terminal">terminal</span>
+<span class="text-[0.6875rem] uppercase tracking-widest mt-1">Terminal</span>
+</div>
+</div>
+</nav>
+<!-- TopNavBar (Authority: JSON) -->
+<header class="fixed top-0 right-0 left-20 bg-[#101319] text-[#00D1FF] font-['Inter'] text-sm tracking-tight h-16 flex justify-between items-center px-6 z-40">
+<div class="flex items-center gap-4">
+<div class="text-lg font-bold text-[#e1e2eb] tracking-tighter">Sentinel SOC</div>
+<div class="h-4 w-[1px] bg-outline-variant/30"></div>
+<div class="flex gap-4">
+<span class="text-[#00D1FF] font-semibold cursor-pointer">GEO-INTEL CANVAS</span>
+<span class="text-[#e1e2eb]/60 hover:bg-[#272a31] transition-colors px-2 rounded cursor-pointer">INFRASTRUCTURE</span>
+</div>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-2 bg-[#191c22] px-3 py-1.5 rounded border border-outline-variant/20">
+<span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">circle</span>
+<span class="text-[10px] font-bold tracking-widest uppercase">System Status: SECURE</span>
+</div>
+<div class="flex items-center gap-4 text-[#e1e2eb]/60">
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-primary transition-colors" data-icon="settings">settings</span>
+<div class="w-8 h-8 rounded bg-surface-container-high flex items-center justify-center overflow-hidden border border-outline-variant/30">
+<img alt="Security Analyst Profile" class="w-full h-full object-cover" data-alt="Close-up portrait of a serious male security analyst in a dark environment with blue screen light reflecting on his face" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDrDstt9vwQLF6fA0eNPWmHwKfmzTyV4CVVAw1jxV_0fuiJCiSnQltZYGz1YgUT7qfZhw_1Fo9qU4ixZbt0ZTbGVtHhKTj4of5cTnGW4b_8k41ATF225528O_euEjdpDU8ZcSe1tvcmsT6ZF9ux-eZuAvLaqaGIn24XLfYhZ_milWLdjHXrgh6uMKBa5X5KPw97vXqxEiQ-mnWk8YyHAQ5vCbsmC6uN7Me4H9WFke049T_Xt6Ei1UgxKEUeWa-gCMKN4wPhyeHL1fQu"/>
+</div>
+</div>
+</div>
+</header>
+<!-- Main Content Area -->
+<main class="ml-20 mt-16 h-[calc(100vh-64px)] relative grid grid-cols-12 gap-0 overflow-hidden">
+<!-- Large Geo-Attack Map (Bento Main) -->
+<section class="col-span-8 relative bg-surface-container-lowest overflow-hidden">
+<div class="absolute inset-0 bg-cover bg-center opacity-40 mix-blend-luminosity" data-alt="Dark stylized satellite map of the world with glowing night lights and deep blue oceanic tones" data-location="Global" style="background-image: url('https://placeholder.pics/svg/300');">
+</div>
+<!-- SVG Overlay for Impossible Travel Arcs -->
+<svg class="absolute inset-0 w-full h-full pointer-events-none z-10">
+<!-- Arc 1: London to Singapore -->
+<path class="glow-path opacity-80" d="M 480 320 Q 700 100 1200 480" fill="none" stroke="#ff3131" stroke-dasharray="8 4" stroke-width="1.5"></path>
+<circle cx="480" cy="320" fill="#ff3131" r="4"></circle>
+<circle cx="1200" cy="480" fill="#ff3131" r="4"></circle>
+<!-- Arc 2: NYC to Moscow -->
+<path class="glow-path opacity-80" d="M 280 340 Q 550 50 850 300" fill="none" stroke="#ff3131" stroke-dasharray="8 4" stroke-width="1.5"></path>
+<circle cx="280" cy="340" fill="#ff3131" r="4"></circle>
+<circle cx="850" cy="300" fill="#ff3131" r="4"></circle>
+<!-- Data Flow Pulses -->
+<circle class="glow-node" cx="650" cy="220" fill="#00d1ff" r="3"></circle>
+<circle class="glow-node" cx="1050" cy="550" fill="#00d1ff" r="3"></circle>
+</svg>
+<!-- Map HUD Overlays -->
+<div class="absolute top-6 left-6 flex flex-col gap-2 z-20">
+<div class="glass-panel px-4 py-3 rounded-lg border-l-2 border-primary-container">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Active Sessions</div>
+<div class="text-2xl font-headline font-bold text-primary">12,842</div>
+</div>
+<div class="glass-panel px-4 py-3 rounded-lg border-l-2 border-error">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold">Impossible Travel Alerts</div>
+<div class="text-2xl font-headline font-bold text-error">04</div>
+</div>
+</div>
+<div class="absolute bottom-6 left-6 z-20 flex gap-4">
+<div class="glass-panel p-4 rounded-lg flex flex-col gap-3 min-w-[200px]">
+<div class="text-[10px] uppercase tracking-widest text-on-surface-variant font-bold border-b border-outline-variant/30 pb-2">Risk Legend</div>
+<div class="flex items-center gap-3">
+<span class="w-3 h-3 rounded-full bg-error shadow-[0_0_8px_#ff3131]"></span>
+<span class="text-xs text-on-surface/80">Critical / Impossible Travel</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-3 h-3 rounded-full bg-primary-container shadow-[0_0_8px_#00d1ff]"></span>
+<span class="text-xs text-on-surface/80">Standard Flow</span>
+</div>
+<div class="flex items-center gap-3">
+<span class="w-3 h-3 rounded-full bg-secondary shadow-[0_0_8px_#79ff5b]"></span>
+<span class="text-xs text-on-surface/80">Internal Peer-to-Peer</span>
+</div>
+</div>
+</div>
+<!-- Contextual Alert Card -->
+<div class="absolute top-6 right-6 z-20 glass-panel p-4 w-72 rounded-lg border border-error/20">
+<div class="flex items-center gap-2 text-error mb-3">
+<span class="material-symbols-outlined text-sm">warning</span>
+<span class="text-[10px] font-bold uppercase tracking-widest">Urgent Intelligence</span>
+</div>
+<div class="text-sm font-bold text-on-surface leading-tight mb-2">Login: Singapore (ID: 9924)</div>
+<div class="text-[10px] text-on-surface-variant mb-4">Occurred 4m after login from London. Speed required: 10,200km/h.</div>
+<button class="w-full py-2 bg-error/10 hover:bg-error/20 border border-error/30 text-error text-[10px] font-bold uppercase tracking-widest transition-all rounded-sm">Isolate User</button>
+</div>
+</section>
+<!-- Right Side Panel: Infrastructure & Heatmap -->
+<aside class="col-span-4 bg-surface-container-low border-l border-outline-variant/10 flex flex-col">
+<!-- Network Heatmap Section -->
+<div class="p-6 flex-1 flex flex-col overflow-hidden">
+<div class="flex items-center justify-between mb-6">
+<div class="flex flex-col">
+<h3 class="text-sm font-bold text-on-surface tracking-tight font-headline">Infrastructure Load</h3>
+<p class="text-[10px] text-on-surface-variant uppercase tracking-widest">Internal Service Mesh Flow</p>
+</div>
+<span class="material-symbols-outlined text-on-surface-variant cursor-pointer">more_vert</span>
+</div>
+<!-- Heatmap Visualization Grid -->
+<div class="flex-1 grid grid-cols-4 grid-rows-6 gap-2">
+<!-- Column Labels -->
+<div class="col-span-1 text-[8px] text-on-surface-variant font-bold text-center">INV</div>
+<div class="col-span-1 text-[8px] text-on-surface-variant font-bold text-center">POS</div>
+<div class="col-span-1 text-[8px] text-on-surface-variant font-bold text-center">PAY</div>
+<div class="col-span-1 text-[8px] text-on-surface-variant font-bold text-center">CDN</div>
+<!-- Heatmap Cells (Simulated) -->
+<div class="bg-primary/20 rounded-sm"></div>
+<div class="bg-primary-container/40 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary-container/80 rounded-sm shadow-[0_0_10px_rgba(0,209,255,0.3)]"></div>
+<div class="bg-primary/30 rounded-sm"></div>
+<div class="bg-error-container/40 rounded-sm"></div>
+<div class="bg-primary/20 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary/50 rounded-sm"></div>
+<div class="bg-primary/20 rounded-sm"></div>
+<div class="bg-error/30 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary/20 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary/20 rounded-sm"></div>
+<div class="bg-primary/10 rounded-sm"></div>
+<div class="bg-primary/40 rounded-sm"></div>
+<div class="bg-primary/60 rounded-sm"></div>
+</div>
+<div class="mt-4 flex justify-between text-[9px] font-bold text-on-surface-variant uppercase tracking-widest">
+<span>Low Load</span>
+<div class="flex gap-1 h-1 flex-1 mx-4 my-auto">
+<div class="bg-primary/10 flex-1"></div>
+<div class="bg-primary/40 flex-1"></div>
+<div class="bg-primary-container flex-1"></div>
+<div class="bg-error flex-1"></div>
+</div>
+<span>Congestion</span>
+</div>
+</div>
+<!-- Critical Endpoints List -->
+<div class="h-1/2 border-t border-outline-variant/10 p-6 flex flex-col bg-surface-container-lowest">
+<h4 class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest mb-4">Traffic Anomalies</h4>
+<div class="space-y-4 overflow-y-auto pr-2">
+<!-- Item 1 -->
+<div class="flex items-start gap-4 group cursor-pointer p-2 rounded hover:bg-surface-container-high transition-colors">
+<div class="w-10 h-10 bg-secondary/10 flex items-center justify-center rounded border border-secondary/20">
+<span class="material-symbols-outlined text-secondary" style="font-variation-settings: 'FILL' 1;">terminal</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between">
+<span class="text-xs font-bold text-on-surface">Payroll-Node-04</span>
+<span class="text-[10px] text-error font-bold">+410% Vol</span>
+</div>
+<div class="text-[10px] text-on-surface-variant">Target: Unrecognized IP (142.250.190.46)</div>
+<div class="w-full bg-outline-variant/20 h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-error h-full w-[85%]"></div>
+</div>
+</div>
+</div>
+<!-- Item 2 -->
+<div class="flex items-start gap-4 group cursor-pointer p-2 rounded hover:bg-surface-container-high transition-colors">
+<div class="w-10 h-10 bg-primary/10 flex items-center justify-center rounded border border-primary/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">database</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between">
+<span class="text-xs font-bold text-on-surface">Inventory-DB-Main</span>
+<span class="text-[10px] text-on-surface-variant">Stable</span>
+</div>
+<div class="text-[10px] text-on-surface-variant">Syncing with AWS-East-Region</div>
+<div class="w-full bg-outline-variant/20 h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-primary-container h-full w-[20%]"></div>
+</div>
+</div>
+</div>
+<!-- Item 3 -->
+<div class="flex items-start gap-4 group cursor-pointer p-2 rounded hover:bg-surface-container-high transition-colors">
+<div class="w-10 h-10 bg-primary/10 flex items-center justify-center rounded border border-primary/20">
+<span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">storefront</span>
+</div>
+<div class="flex-1">
+<div class="flex justify-between">
+<span class="text-xs font-bold text-on-surface">POS-Registry-Global</span>
+<span class="text-[10px] text-primary font-bold">Encrypted</span>
+</div>
+<div class="text-[10px] text-on-surface-variant">Peer connection healthy (0.4ms)</div>
+<div class="w-full bg-outline-variant/20 h-1 mt-2 rounded-full overflow-hidden">
+<div class="bg-secondary-fixed h-full w-[12%]"></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+</aside>
+</main>
+<!-- Map Search / Filter Floating Bar (Contextual) -->
+<div class="fixed bottom-6 left-1/2 -translate-x-1/2 glass-panel border border-outline-variant/20 px-6 py-3 rounded-full flex items-center gap-6 z-50">
+<div class="flex items-center gap-2 group cursor-pointer">
+<span class="material-symbols-outlined text-primary group-hover:scale-110 transition-transform">search</span>
+<span class="text-[10px] font-bold text-on-surface uppercase tracking-widest">Filter Entity</span>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant/40"></div>
+<div class="flex items-center gap-4">
+<label class="flex items-center gap-2 cursor-pointer">
+<div class="w-3 h-3 border border-primary-container rounded-sm flex items-center justify-center bg-primary-container">
+<span class="material-symbols-outlined text-[8px] text-on-primary">check</span>
+</div>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Live Flow</span>
+</label>
+<label class="flex items-center gap-2 cursor-pointer opacity-50">
+<div class="w-3 h-3 border border-outline rounded-sm"></div>
+<span class="text-[10px] font-bold text-on-surface-variant uppercase tracking-widest">Historical</span>
+</label>
+</div>
+<div class="h-4 w-[1px] bg-outline-variant/40"></div>
+<div class="flex gap-2">
+<button class="bg-surface-container-highest p-1.5 rounded-sm hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">zoom_in</span>
+</button>
+<button class="bg-surface-container-highest p-1.5 rounded-sm hover:text-primary transition-colors">
+<span class="material-symbols-outlined text-sm">zoom_out</span>
+</button>
+</div>
+</div>
+</body></html>

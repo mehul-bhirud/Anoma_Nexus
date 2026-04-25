@@ -1,6 +1,6 @@
-# Aegis-Fusion (Anomalyze)
+# Anoma
 
-**Aegis** is an advanced, real-time **Insider Threat Detection Engine** designed to process large streams of enterprise activity logs to detect anomalous and potentially destructive user behavior.
+**Anoma** is an advanced, real-time **Insider Threat Detection Engine** designed to process large streams of enterprise activity logs to detect anomalous and potentially destructive user behavior.
 
 ## Features
 
