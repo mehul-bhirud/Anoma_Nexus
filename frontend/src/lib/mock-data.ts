@@ -11,6 +11,8 @@ export interface Anomaly {
   hourlyActivity: number[]; // 24 hours of risk/activity scores (0-100)
   aiSummary?: string;
   merkle_root?: string;
+  // XAI: Top anomalous features from VAE per-feature reconstruction error
+  xai_top_features?: { name: string; error: number; index: number }[];
   aegis_analysis?: {
     risk_score: number;
     merkle_root: string;

@@ -160,10 +160,11 @@ function getPlaybookForAlert(a: any): { title: string; desc: string; active: boo
 // ═══════════════════════════════════════════════════════════════════════════
 
 export default function ResponsePage() {
-  const { anomalies } = useAegisStream();
+  const { anomalies, isolateHost, revokeAccess, isolatedUsers } = useAegisStream();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isThreatModalOpen, setIsThreatModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [soarLoading, setSoarLoading] = useState<string | null>(null);
 
   // Auto-select the latest alert when stream updates (if nothing selected)
   useEffect(() => {
@@ -214,10 +215,18 @@ export default function ResponsePage() {
   const timestamp = extractTimestamp(selected);
   const riskScore = extractRiskScore(selected);
   const playbooks = getPlaybookForAlert(selected);
+  const userIsIsolated = isolatedUsers.has(user);
 
-  const handleCommandInvoke = (label: string) => {
-    if (label === "Revoke Access" || label === "Isolate Host") {
-      setIsThreatModalOpen(true);
+  // ── SOAR: Wire the action buttons to real backend endpoints ────────
+  const handleCommandInvoke = async (label: string) => {
+    if (label === "Isolate Host") {
+      setSoarLoading("isolate");
+      await isolateHost(user);
+      setSoarLoading(null);
+    } else if (label === "Revoke Access") {
+      setSoarLoading("revoke");
+      await revokeAccess(user);
+      setSoarLoading(null);
     }
   };
 
@@ -368,7 +377,27 @@ export default function ResponsePage() {
         {/* ── Right Column: Selected Alert Detail ── */}
         <section className="col-span-12 lg:col-span-8 flex flex-col gap-6 overflow-y-auto pr-2">
           {/* Main Card */}
-          <div className="bg-[#0A0E14] p-8 border border-white/[0.03] relative overflow-hidden">
+          <div className={cn(
+            "bg-[#0A0E14] p-8 border relative overflow-hidden transition-all duration-500",
+            userIsIsolated
+              ? "border-red-500/50 shadow-[0_0_40px_rgba(239,68,68,0.15)]"
+              : "border-white/[0.03]"
+          )}>
+            {/* SOAR Isolation Banner */}
+            {userIsIsolated && (
+              <motion.div
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: "auto", opacity: 1 }}
+                className="mb-6 p-4 bg-red-950/40 border border-red-500/30 rounded-sm flex items-center gap-3"
+              >
+                <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
+                <div className="flex-1">
+                  <p className="text-xs font-black text-red-400 uppercase tracking-widest">HOST ISOLATED — NETWORK SEVERED</p>
+                  <p className="text-[10px] text-red-300/60 mt-1 font-mono">All network access revoked. Session tokens invalidated. SOAR action confirmed.</p>
+                </div>
+                <Badge className="bg-red-500 text-black text-[9px] font-black uppercase tracking-widest border-none animate-pulse">ISOLATED</Badge>
+              </motion.div>
+            )}
             <div className="absolute -top-32 -right-32 w-80 h-80 bg-primary/[0.03] blur-[100px] rounded-full pointer-events-none" />
             
             <div className="relative z-10">
@@ -428,8 +457,21 @@ export default function ResponsePage() {
 
               {/* Action Control Panel */}
               <div className="grid grid-cols-3 gap-4 mb-10">
-                <ActionButton icon={Ban} label="Isolate Host" danger onClick={() => handleCommandInvoke("Isolate Host")} />
-                <ActionButton icon={Lock} label="Revoke Access" primary onClick={() => handleCommandInvoke("Revoke Access")} />
+                <ActionButton
+                  icon={Ban}
+                  label={userIsIsolated ? "HOST ISOLATED" : soarLoading === "isolate" ? "Isolating..." : "Isolate Host"}
+                  danger
+                  disabled={userIsIsolated || soarLoading !== null}
+                  active={userIsIsolated}
+                  onClick={() => handleCommandInvoke("Isolate Host")}
+                />
+                <ActionButton
+                  icon={Lock}
+                  label={soarLoading === "revoke" ? "Revoking..." : "Revoke Access"}
+                  primary
+                  disabled={soarLoading !== null}
+                  onClick={() => handleCommandInvoke("Revoke Access")}
+                />
                 <ActionButton icon={Fingerprint} label="Trigger MFA" success />
               </div>
 
@@ -444,6 +486,58 @@ export default function ResponsePage() {
                     <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
                     <p className="text-xs text-primary/80 font-medium">{recommendation}</p>
                   </div>
+                </div>
+              )}
+
+              {/* XAI Feature Attribution Heatmap */}
+              {selected?.xai_top_features && selected.xai_top_features.length > 0 && (
+                <div className="bg-black/20 p-6 border border-white/[0.03] rounded-sm mb-6">
+                  <h4 className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-600 mb-5 flex items-center gap-2">
+                    <Zap className="h-3.5 w-3.5 text-orange-400" />
+                    VAE Feature Attribution
+                    <span className="ml-auto text-[8px] bg-emerald-900/20 text-emerald-400 border border-emerald-500/20 px-2 py-0.5 rounded-sm font-mono">LIVE XAI</span>
+                  </h4>
+                  <div className="space-y-3">
+                    {selected.xai_top_features.map((feat: any, idx: number) => {
+                      const maxErr = Math.max(...selected.xai_top_features!.map((f: any) => f.error), 0.0001);
+                      const pct = (feat.error / maxErr) * 100;
+                      const friendlyName = feat.name
+                        .replace(/_/g, " ")
+                        .replace(/\b\w/g, (c: string) => c.toUpperCase());
+                      
+                      return (
+                        <div key={idx}>
+                          <div className="flex justify-between items-baseline mb-1">
+                            <span className="text-[10px] font-mono font-bold text-slate-400 uppercase tracking-widest truncate max-w-[160px]" title={feat.name}>
+                              {friendlyName}
+                            </span>
+                            <span className={cn(
+                              "text-[10px] font-mono font-black tabular-nums",
+                              pct > 80 ? "text-red-400" : pct > 50 ? "text-orange-400" : "text-amber-400"
+                            )}>
+                              {feat.error.toFixed(4)}
+                            </span>
+                          </div>
+                          <div className="w-full h-2 bg-white/[0.03] rounded-sm overflow-hidden">
+                            <motion.div
+                              initial={{ width: 0 }}
+                              animate={{ width: `${Math.max(pct, 3)}%` }}
+                              transition={{ delay: idx * 0.1 + 0.2, duration: 0.5 }}
+                              className={cn(
+                                "h-full rounded-sm",
+                                pct > 80 ? "bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.3)]"
+                                  : pct > 50 ? "bg-orange-500 shadow-[0_0_8px_rgba(249,115,22,0.25)]"
+                                  : "bg-amber-500/80"
+                              )}
+                            />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[9px] text-slate-700 font-mono mt-4 italic">
+                    Per-dimension MSE · {selected.xai_top_features.length} features · topk vectorized
+                  </p>
                 </div>
               )}
 
@@ -526,13 +620,17 @@ export default function ResponsePage() {
 
 // ── Sub-Components ──────────────────────────────────────────────────────────
 
-function ActionButton({ icon: Icon, label, primary, danger, success, onClick }: any) {
+function ActionButton({ icon: Icon, label, primary, danger, success, onClick, disabled, active }: any) {
   return (
     <button 
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
+      disabled={disabled}
       className={cn(
         "flex flex-col items-center justify-center gap-2 p-6 transition-all duration-300 group border rounded-sm relative overflow-hidden",
-        danger 
+        disabled && !active && "opacity-40 cursor-not-allowed",
+        active
+          ? "bg-red-950/30 border-red-500/50 shadow-[0_0_20px_rgba(239,68,68,0.15)] cursor-default"
+          : danger 
           ? "bg-black/20 border-white/[0.05] hover:border-red-900/50 hover:bg-red-900/5" 
           : primary 
           ? "bg-black/20 border-white/[0.05] hover:border-primary/50 hover:bg-primary/5"
@@ -540,10 +638,14 @@ function ActionButton({ icon: Icon, label, primary, danger, success, onClick }: 
       )}
     >
       <Icon className={cn(
-        "h-8 w-8 transition-transform group-hover:scale-110",
-        danger ? "text-red-500" : primary ? "text-primary" : "text-emerald-500"
+        "h-8 w-8 transition-transform",
+        !disabled && "group-hover:scale-110",
+        active ? "text-red-500 animate-pulse" : danger ? "text-red-500" : primary ? "text-primary" : "text-emerald-500"
       )} />
-      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500 group-hover:text-slate-300">{label}</span>
+      <span className={cn(
+        "text-[10px] font-bold uppercase tracking-widest",
+        active ? "text-red-400" : "text-slate-500 group-hover:text-slate-300"
+      )}>{label}</span>
     </button>
   );
 }

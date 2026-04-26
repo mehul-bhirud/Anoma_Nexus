@@ -1,10 +1,12 @@
 {
-  "num_features": 61,
+  "num_features": 64,
   "feature_names": [
     "hour_sin_mean",
     "hour_sin_std",
     "hour_cos_mean",
     "hour_cos_std",
+    "is_weekend",
+    "is_out_of_hours",
     "session_duration_s",
     "log_count",
     "delta_s_mean",
@@ -61,7 +63,8 @@
     "flag_destructive_action_max",
     "flag_critical_resource_max",
     "flag_optical_sensor_max",
-    "flag_high_entropy_max"
+    "flag_high_entropy_max",
+    "impossible_travel_max"
   ],
   "scaling": {
     "hour_sin_mean": {
@@ -83,6 +86,16 @@
       "min": 0.0,
       "max": 0.47612226009368896,
       "range": 0.47612226009368896
+    },
+    "is_weekend": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
+    },
+    "is_out_of_hours": {
+      "min": 0.0,
+      "max": 1.0,
+      "range": 1.0
     },
     "session_duration_s": {
       "min": 0.0,
@@ -379,6 +392,11 @@
       "max": 0.0,
       "range": 0.0,
       "trap": true
+    },
+    "impossible_travel_max": {
+      "min": 11.263891220092773,
+      "max": 11543.822265625,
+      "range": 11532.558374404907
     }
   },
   "total_logs": 500000,

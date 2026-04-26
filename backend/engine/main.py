@@ -37,6 +37,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import joblib
+
 import httpx
 import numpy as np
 import pandas as pd
@@ -68,6 +70,8 @@ ALLOWED_SUBNET = "192.168.1."
 ROOT         = Path(__file__).resolve().parent.parent          # backend/
 JSONL_PATH   = ROOT / "data" / "demo_activity_stream.jsonl"
 MODEL_PATH   = ROOT / "ml" / "models" / "aegis_vae_model_weighted.pth"
+IFOREST_PATH = ROOT / "ml" / "models" / "iforest.pkl"
+IFOREST_CAL  = ROOT / "ml" / "models" / "iforest_calibration.json"
 META_PATH    = ROOT / "ml" / "data" / "feature_meta.json"
 ROLES_PATH   = ROOT / "ml" / "data" / "user_roles.csv"
 THRESH_PATH  = ROOT / "ml" / "data" / "threshold_stats.json"
@@ -76,8 +80,13 @@ OLLAMA_URL     = "http://localhost:11434/api/generate"
 OLLAMA_MODEL   = "llama3"
 OLLAMA_TIMEOUT = 60.0              # seconds — local LLMs can be slow
 
+# ── Discord Webhook (PagerDuty Flex) ──────────────────────────────────────
+# Paste your Discord webhook URL here. Set to "" to disable.
+# Create one at: Discord Server → Settings → Integrations → Webhooks → New
+DISCORD_WEBHOOK_URL = ""             # e.g. "https://discord.com/api/webhooks/1234/abcd"
+
 ALERT_THRESHOLD = 85               # risk_score > this → critical_alert + LLM
-INPUT_DIM       = 61               # feature vector width (from preprocess.py)
+INPUT_DIM       = 64               # feature vector width (61 base + 2 time-context + 1 travel vel)
 LATENT_DIM      = 10                # VAE latent space (from train_vae.py)
 STREAM_SPEED    = 0.1              # seconds between log reads (~10 logs/sec)
 
@@ -137,7 +146,7 @@ log.propagate = False
 class InsiderThreatVAE(nn.Module):
     """Variational Autoencoder for enterprise activity anomaly detection.
 
-    Architecture:  22 → 32 → 16 → [μ, logσ²] → 5 (latent) → 16 → 32 → 22
+    Architecture:  63 -> 128 -> 64 -> [mu, logvar] -> 10 (latent) -> 64 -> 128 -> 63
     """
 
     def __init__(self, input_dim: int = INPUT_DIM, latent_dim: int = LATENT_DIM):
@@ -209,10 +218,15 @@ def preprocess_json_to_tensor(log_data: dict, user_history: list | None = None) 
     
     hour_sins = []
     hour_coss = []
+    # ── Time-context features (is_weekend, is_out_of_hours) ──────────
+    weekends = []       # 1.0 if Saturday(5) or Sunday(6)
+    out_of_hours = []   # 1.0 if strictly between 20:00 and 06:00
     for t in ts_list:
         hf = t.hour + t.minute / 60.0
         hour_sins.append(math.sin(2.0 * math.pi * hf / 24.0))
         hour_coss.append(math.cos(2.0 * math.pi * hf / 24.0))
+        weekends.append(1.0 if t.weekday() >= 5 else 0.0)
+        out_of_hours.append(1.0 if (t.hour >= 20 or t.hour < 6) else 0.0)
         
     delta_s = []
     for i in range(1, len(ts_list)):
@@ -291,11 +305,40 @@ def preprocess_json_to_tensor(log_data: dict, user_history: list | None = None) 
         if ent > 0.95:
             f_ent = 1.0
 
+    # ── Impossible Travel Velocity (Haversine) ───────────────────────
+    # If two consecutive logs originate from different cities that exist
+    # in CITY_COORDS, compute great-circle distance / time_delta.
+    # Max velocity > ~0.3 km/s (jet speed) is physically impossible.
+    _max_travel_velocity = 0.0
+    for i in range(1, len(session_logs)):
+        loc_a = session_logs[i - 1].get("context", {}).get("location", "")
+        loc_b = session_logs[i].get("context", {}).get("location", "")
+        if loc_a == loc_b or loc_a not in CITY_COORDS or loc_b not in CITY_COORDS:
+            continue
+        # Time delta in seconds between the two consecutive logs
+        dt = abs((ts_list[i] - ts_list[i - 1]).total_seconds()) if i < len(ts_list) else 0.0
+        if dt < 1.0:
+            dt = 1.0  # clamp to avoid division by zero
+        # Haversine formula
+        lat1, lon1 = math.radians(CITY_COORDS[loc_a][0]), math.radians(CITY_COORDS[loc_a][1])
+        lat2, lon2 = math.radians(CITY_COORDS[loc_b][0]), math.radians(CITY_COORDS[loc_b][1])
+        dlat = lat2 - lat1
+        dlon = lon2 - lon1
+        a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+        c = 2 * math.asin(math.sqrt(a))
+        km = 6371.0 * c          # Earth radius in km
+        vel = km / dt             # km/sec
+        if vel > _max_travel_velocity:
+            _max_travel_velocity = vel
+
     raw_feat = {
         "hour_sin_mean": np.mean(hour_sins),
         "hour_sin_std": np.std(hour_sins, ddof=1) if len(hour_sins) > 1 else 0.0,
         "hour_cos_mean": np.mean(hour_coss),
         "hour_cos_std": np.std(hour_coss, ddof=1) if len(hour_coss) > 1 else 0.0,
+        # ── NEW: Time-context binary signals ─────────────────────────
+        "is_weekend": max(weekends) if weekends else 0.0,         # any log on weekend → 1.0
+        "is_out_of_hours": max(out_of_hours) if out_of_hours else 0.0,  # any log at night → 1.0
         "session_duration_s": duration_s,
         "log_count": float(log_count),
         "delta_s_mean": np.mean(delta_s),
@@ -340,7 +383,9 @@ def preprocess_json_to_tensor(log_data: dict, user_history: list | None = None) 
         "flag_destructive_action_max": f_destr,
         "flag_critical_resource_max": f_crit,
         "flag_optical_sensor_max": f_opt,
-        "flag_high_entropy_max": f_ent
+        "flag_high_entropy_max": f_ent,
+        # Impossible travel velocity (km/s) — Haversine
+        "impossible_travel_max": _max_travel_velocity,
     })
 
     final_vec = []
@@ -400,33 +445,51 @@ class EnterpriseMerkleTree:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-#  RISK SCORING (Calibrated Sigmoid)
+#  RISK SCORING — IsolationForest Ensemble (replaces raw MSE scoring)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+#  The IsolationForest's decision_function(z) returns:
+#    POSITIVE = normal  (deep inside the learned normal manifold)
+#    NEGATIVE = anomaly (isolated quickly by random cuts)
+#    0.0      = boundary
+#
+#  We map this to [1, 100] using pre-computed calibration anchors:
+#    safe_anchor  = train p5  (the "most normal" baseline)
+#    alert_anchor = test p75  (clearly anomalous territory)
+#
+#  Math:  risk = clamp((safe - d) / (safe - alert), 0, 1) * 99 + 1
 # ═══════════════════════════════════════════════════════════════════════════
 
 import random
 
-def mse_to_risk_score(mse: float) -> int:
+# Calibration anchors (loaded from iforest_calibration.json at startup)
+IFOREST_SAFE_ANCHOR:  float = 0.0329   # default, overridden at startup
+IFOREST_ALERT_ANCHOR: float = -0.1296  # default, overridden at startup
+
+
+def iforest_decision_to_risk(decision_score: float) -> int:
+    """Map IsolationForest decision_function output to 1-100 risk score.
+
+    Uses calibrated anchors computed during train_iforest.py:
+      safe_anchor  (train p5)  -> risk ~1   (deep normal)
+      alert_anchor (test p75)  -> risk ~100 (clear anomaly)
+
+    The inversion (safe - d) is necessary because decision_function
+    returns HIGHER values for MORE NORMAL samples.
     """
-    Hackathon Magic Scaler: Maps raw MSE to a diverse 0-100 curve.
-    """
-    # Based on the terminal output and example target:
-    NORMAL_MSE = 0.400   # Baseline mean MSE observed for live single incoming logs
-    CRITICAL_MSE = 2.500 # Critical MSE observed for live stream anomaly logs
-    
-    # 1. Normalize the raw MSE to a 0.0 - 1.0 scale
-    normalized = (mse - NORMAL_MSE) / (CRITICAL_MSE - NORMAL_MSE)
-    
-    # Clamp it so it doesn't go below 0 or above 1
+    span = IFOREST_SAFE_ANCHOR - IFOREST_ALERT_ANCHOR
+    if abs(span) < 1e-12:
+        return 50
+
+    normalized = (IFOREST_SAFE_ANCHOR - decision_score) / span
     normalized = max(0.0, min(1.0, normalized))
-    
-    # 2. Apply a logarithmic curve to spread out the "Noise"
-    risk = (normalized ** 0.65) * 100
-    
-    # 3. Add UI Jitter (The "Wow" Factor)
-    if risk > 5 and risk < 95:
-        risk += random.uniform(-3.0, 3.0)
-        
-    return max(1, min(100, int(risk)))
+    risk = int(normalized * 99 + 1)
+
+    # UI jitter: subtle variance for visual realism on the dashboard
+    if 5 < risk < 95:
+        risk += int(random.uniform(-2.0, 2.0))
+
+    return max(1, min(100, risk))
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -544,6 +607,21 @@ class OllamaAnalyst:
                     self._is_processing = False
                     
                 w_out["ai_analysis"] = analysis
+
+                # ── Discord "PagerDuty Flex" ──────────────────────
+                # Fire the LLM narrative to Discord so phones buzz
+                # on stage.  Wrapped in try/except — never crashes.
+                try:
+                    # Extract uid from the original log payload
+                    _actor = (w_log[-1] if isinstance(w_log, list) else w_log
+                              ).get("actor", {})
+                    _uid = (_actor.get("user_id", "")
+                            or _actor.get("user", {}).get("uid", "unknown"))
+                    _narrative = analysis.get("summary", "No narrative.")
+                    await send_discord_alert(_uid, -w_score, _narrative)
+                except Exception as _discord_err:
+                    log.warning("📟 Discord fire-and-forget failed: %s", _discord_err)
+
                 await manager.broadcast(w_out)
                 
             except asyncio.CancelledError:
@@ -673,6 +751,96 @@ class OllamaAnalyst:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
+#  DISCORD WEBHOOK — "PagerDuty Flex" (phones buzz on stage)
+# ═══════════════════════════════════════════════════════════════════════════
+
+async def send_discord_alert(
+    uid: str,
+    risk_score: int,
+    llama_narrative: str,
+    webhook_url: str = DISCORD_WEBHOOK_URL,
+) -> None:
+    """Fire a Rich Embed to a Discord webhook.
+
+    Called immediately after Llama 3 (or rule-based fallback) produces
+    the incident narrative for a critical alert.  Designed to make the
+    presenter's phone buzz on stage during the live hackathon demo.
+
+    This function is fire-and-forget: it will NEVER raise.  If the
+    Discord API is down, rate-limited, or the URL is empty, the main
+    pipeline continues unaffected.
+
+    Payload format: Discord "Rich Embed" (embeds[] array).
+    """
+    # ── Guard: skip if no webhook configured ──────────────────────────
+    if not webhook_url:
+        return
+
+    # ── Color coding by severity ─────────────────────────────────────
+    if risk_score >= 95:
+        color = 0xFF0000       # Pure red — critical
+        severity_label = "🔴 CRITICAL"
+    elif risk_score >= 85:
+        color = 0xFF6600       # Orange — high
+        severity_label = "🟠 HIGH"
+    elif risk_score >= 60:
+        color = 0xFFCC00       # Yellow — elevated
+        severity_label = "🟡 ELEVATED"
+    else:
+        color = 0x00CC66       # Green — low
+        severity_label = "🟢 LOW"
+
+    # ── Build Discord Rich Embed ─────────────────────────────────────
+    embed = {
+        "title":       f"🚨 AEGIS INTERCEPT — {severity_label}",
+        "description": llama_narrative[:2048],   # Discord limit
+        "color":       color,
+        "fields": [
+            {
+                "name":   "👤 Compromised User",
+                "value":  f"`{uid}`",
+                "inline": True,
+            },
+            {
+                "name":   "⚡ Risk Score",
+                "value":  f"**{risk_score}** / 100",
+                "inline": True,
+            },
+            {
+                "name":   "🛡️ Detection Engine",
+                "value":  "VAE + IsolationForest Ensemble",
+                "inline": True,
+            },
+        ],
+        "footer": {
+            "text": "AEGIS-Fusion • Insider Threat Detection Engine v2.0",
+        },
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+
+    payload = {
+        "username":   "AEGIS-Fusion SOC",
+        "avatar_url": "https://cdn-icons-png.flaticon.com/512/6941/6941697.png",
+        "embeds":     [embed],
+    }
+
+    # ── Fire-and-forget POST ──────────────────────────────────────────
+    try:
+        async with httpx.AsyncClient(timeout=5.0) as client:
+            resp = await client.post(webhook_url, json=payload)
+            if resp.status_code == 204:
+                log.info("📟 Discord alert sent — uid=%s risk=%d", uid, risk_score)
+            else:
+                log.warning(
+                    "📟 Discord responded %d — %s",
+                    resp.status_code, resp.text[:200],
+                )
+    except Exception as exc:
+        # NEVER crash the pipeline over a webhook failure
+        log.warning("📟 Discord webhook failed (non-fatal): %s", exc)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
 #  WEBSOCKET CONNECTION MANAGER
 # ═══════════════════════════════════════════════════════════════════════════
 
@@ -797,6 +965,7 @@ class PipelineStats:
 
 device   = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model:   InsiderThreatVAE | None = None
+iforest_model = None          # sklearn IsolationForest (loaded at startup)
 user_history_buffer: dict[str, list[dict]] = {}
 merkle   = EnterpriseMerkleTree()
 ollama   = OllamaAnalyst()
@@ -827,13 +996,51 @@ def calculate_weighted_mse(recon_x: torch.Tensor, x: torch.Tensor, reduction: st
     return sq_error.mean()
 
 
-async def _run_inference(tensor: torch.Tensor) -> float:
-    """Run VAE forward pass in a thread so the event loop never blocks."""
-    def _infer() -> float:
+async def _run_inference(tensor: torch.Tensor) -> tuple[float, list[dict]]:
+    """VAE→IForest ensemble with XAI feature attribution.
+
+    Pipeline:
+      tensor → VAE.encode() → mu (10-dim) → IForest.decision_function()
+      tensor → VAE.forward() → reconstruction → per-feature MSE → topk(5)
+
+    Returns:
+      (decision_score, xai_top_features)
+      - decision_score: float (higher = more normal)
+      - xai_top_features: list of {"name": str, "error": float, "index": int}
+    """
+    def _infer() -> tuple[float, list[dict]]:
         with torch.no_grad():
             t = tensor.to(device)
-            recon, _, _ = model(t)                             # type: ignore[misc]
-            return calculate_weighted_mse(recon, t).item()
+
+            # ── IsolationForest scoring (unchanged) ──────────────
+            mu, logvar = model.encode(t)                           # type: ignore[misc]
+            z_np = mu.cpu().numpy()                                # [1, 10]
+            decision = iforest_model.decision_function(z_np)       # type: ignore[union-attr]
+
+            # ── XAI: Per-feature reconstruction error ────────────
+            # Full forward pass: encode → reparameterize → decode
+            z = model.reparameterize(mu, logvar)                   # type: ignore[misc]
+            recon = model.decode(z)                                # type: ignore[misc]
+
+            # Per-feature squared error (no reduction) → shape [63]
+            feature_errors = ((recon - t) ** 2).squeeze(0)         # [63]
+
+            # Top 5 most anomalous features via vectorized topk
+            top_vals, top_idx = torch.topk(feature_errors, k=min(5, feature_errors.shape[0]))
+
+            # Map indices → human-readable names from FEATURE_META
+            names = (FEATURE_META or {}).get("feature_names", [])
+            xai_features: list[dict] = []
+            for val, idx in zip(top_vals.tolist(), top_idx.tolist()):
+                name = names[idx] if idx < len(names) else f"dim_{idx}"
+                xai_features.append({
+                    "name":  name,
+                    "error": round(val, 6),
+                    "index": idx,
+                })
+
+            return float(decision[0]), xai_features
+
     return await asyncio.to_thread(_infer)
 
 
@@ -1030,19 +1237,19 @@ async def process_stream(speed: float = STREAM_SPEED, max_logs: int = 0):
                     # ══════════════════════════════════════════════════
                     else:
                         tensor      = preprocess_json_to_tensor(log_data, user_history_buffer.get(uid, []))
-                        mse         = await _run_inference(tensor)
-                        risk_score  = mse_to_risk_score(mse)
+                        decision, xai_top_features = await _run_inference(tensor)
+                        risk_score  = iforest_decision_to_risk(decision)
                         is_critical = risk_score > ALERT_THRESHOLD
 
                         if is_critical:
                             log.critical(
-                                "🧠 BRAIN-1 ML │ risk=%d │ %s │ %s │ %s │ "
-                                "%.4fMB │ MSE=%.6f",
+                                "🧠 BRAIN-1 ENSEMBLE │ risk=%d │ %s │ %s │ %s │ "
+                                "%.4fMB │ iforest=%.4f",
                                 risk_score, uid,
                                 log_data.get("action", {}).get("type", "?"),
                                 log_data.get("resource", {}).get("name", "?"),
                                 log_data.get("resource", {}).get("volume_mb", 0),
-                                mse,
+                                decision,
                             )
 
                     # ── Build output contract ─────────────────────────
@@ -1055,6 +1262,8 @@ async def process_stream(speed: float = STREAM_SPEED, max_logs: int = 0):
                                             else "brain1_vae",
                         "signature_name":   b0_name if b0_hit else None,
                         "raw_log":          log_data,
+                        # ── XAI: Top contributing features ────────
+                        "xai_top_features": xai_top_features if not b0_hit else [],
                         # Queue handles LLM population for critical logs
                         "ai_analysis":      None,
                         "merkle_integrity": "Verified",
@@ -1141,7 +1350,8 @@ _BANNER = """
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup / shutdown lifecycle."""
-    global model, ROLES_DF, TRAIN_MSE_MEAN, TRAIN_MSE_STD, FEATURE_META
+    global model, iforest_model, ROLES_DF, TRAIN_MSE_MEAN, TRAIN_MSE_STD, FEATURE_META
+    global IFOREST_SAFE_ANCHOR, IFOREST_ALERT_ANCHOR
 
     try:
         sys.stdout.buffer.write(_BANNER.encode("utf-8"))
@@ -1189,6 +1399,21 @@ async def lifespan(app: FastAPI):
         model.eval()
         log.warning("⚠  %s not found — running with RANDOM weights!",
                     MODEL_PATH.name)
+
+    # ── IsolationForest ensemble ──
+    if IFOREST_PATH.exists():
+        iforest_model = joblib.load(IFOREST_PATH)
+        log.info("[IFOR] IsolationForest loaded -- %d trees",
+                 iforest_model.n_estimators)
+    else:
+        log.warning("iforest.pkl not found -- falling back to MSE scoring")
+
+    if IFOREST_CAL.exists():
+        _cal = json.loads(IFOREST_CAL.read_text("utf-8"))
+        IFOREST_SAFE_ANCHOR  = _cal["safe_anchor"]
+        IFOREST_ALERT_ANCHOR = _cal["alert_anchor"]
+        log.info("[IFOR] Calibration    -- safe=%.4f  alert=%.4f",
+                 IFOREST_SAFE_ANCHOR, IFOREST_ALERT_ANCHOR)
 
     # ── Ollama ──
     await ollama.initialize()
@@ -1917,6 +2142,96 @@ async def update_user_permissions(payload: dict):
             return {"message": "Permissions updated successfully", "user_id": user_id, "permissions": permissions}
 
     return {"error": "User not found or roles file missing"}
+
+
+# ── SOAR — Security Orchestration, Automation & Response ─────────────────
+
+# In-memory audit trail for all SOAR actions taken during this session.
+# In production this would be a database; for the hackathon, a list suffices.
+soar_actions: list[dict] = []
+
+
+@app.post("/api/isolate/{uid}", tags=["SOAR"])
+async def isolate_host(uid: str):
+    """SOAR Action: Isolate a compromised host by user ID.
+
+    This endpoint simulates a network-level containment action:
+      1. Records the action in the SOAR audit trail.
+      2. Broadcasts a SOAR_ACTION payload to ALL connected WebSocket clients
+         so every analyst's UI instantly reflects the isolation.
+      3. Returns HTTP 200 immediately — the broadcast is fire-and-forget
+         from the caller's perspective, making the UI feel snappy on stage.
+
+    The frontend catches {"type": "SOAR_ACTION"} and flashes the user's
+    row red + changes status to "ISOLATED".
+    """
+    ts = datetime.utcnow().isoformat() + "Z"
+
+    # ── Build the SOAR payload ──
+    payload = {
+        "type":      "SOAR_ACTION",
+        "action":    "ISOLATE",
+        "uid":       uid,
+        "status":    "NETWORK_SEVERED",
+        "timestamp": ts,
+        "message":   f"Host isolation executed for {uid}. "
+                     "All network access revoked. Session tokens invalidated.",
+    }
+
+    # ── Audit trail ──
+    soar_actions.append(payload)
+
+    # ── Blast to every connected dashboard ──
+    await manager.broadcast(payload)
+
+    log.critical(
+        "🔒 SOAR ISOLATE — uid=%s | clients=%d | ts=%s",
+        uid, manager.count, ts,
+    )
+
+    # Instant 200 — no waiting for downstream effects
+    return {
+        "status":    "executed",
+        "action":    "ISOLATE",
+        "uid":       uid,
+        "timestamp": ts,
+        "broadcast": f"Sent to {manager.count} client(s)",
+    }
+
+
+@app.post("/api/revoke/{uid}", tags=["SOAR"])
+async def revoke_access(uid: str):
+    """SOAR Action: Revoke all access tokens for a user."""
+    ts = datetime.utcnow().isoformat() + "Z"
+
+    payload = {
+        "type":      "SOAR_ACTION",
+        "action":    "REVOKE",
+        "uid":       uid,
+        "status":    "ACCESS_REVOKED",
+        "timestamp": ts,
+        "message":   f"All credentials and session tokens revoked for {uid}.",
+    }
+
+    soar_actions.append(payload)
+    await manager.broadcast(payload)
+
+    log.critical(
+        "🔑 SOAR REVOKE — uid=%s | clients=%d | ts=%s",
+        uid, manager.count, ts,
+    )
+
+    return {
+        "status": "executed", "action": "REVOKE",
+        "uid": uid, "timestamp": ts,
+        "broadcast": f"Sent to {manager.count} client(s)",
+    }
+
+
+@app.get("/api/soar/actions", tags=["SOAR"])
+async def get_soar_actions():
+    """Return the audit trail of all SOAR actions taken this session."""
+    return {"total": len(soar_actions), "actions": soar_actions}
 
 
 # ── WebSocket Endpoint ────────────────────────────────────────────────────

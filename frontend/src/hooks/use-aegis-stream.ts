@@ -1,5 +1,15 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { Anomaly } from "@/lib/mock-data";
+
+// ── SOAR Action payload shape (from backend /api/isolate/{uid}) ──────────
+interface SOARAction {
+  type: "SOAR_ACTION";
+  action: "ISOLATE" | "REVOKE";
+  uid: string;
+  status: string;
+  timestamp: string;
+  message: string;
+}
 
 export function useAegisStream() {
   const [anomalies, setAnomalies] = useState<Anomaly[]>([]);
@@ -8,6 +18,10 @@ export function useAegisStream() {
   const [merkleRoot, setMerkleRoot] = useState<string>("");
   const [backendStats, setBackendStats] = useState<any | null>(null);
   const socketRef = useRef<WebSocket | null>(null);
+
+  // ── SOAR: Track which user IDs have been isolated/revoked ──────────
+  const [isolatedUsers, setIsolatedUsers] = useState<Set<string>>(new Set());
+  const [soarActions, setSoarActions] = useState<SOARAction[]>([]);
 
   useEffect(() => {
     // Attempt real connection to FastAPI
@@ -25,6 +39,22 @@ export function useAegisStream() {
         socket.onmessage = (event) => {
           const data = JSON.parse(event.data);
           
+          // ── SOAR ACTION HANDLER ────────────────────────────────────
+          // Intercept {"type": "SOAR_ACTION"} payloads BEFORE anything else.
+          // These are broadcast by the backend when an analyst clicks
+          // "Isolate Host" or "Revoke Access" on ANY connected dashboard.
+          if (data.type === "SOAR_ACTION") {
+            const action = data as SOARAction;
+            console.log(
+              `%c🔒 SOAR: ${action.action} → ${action.uid}`,
+              "color: #ff4444; font-weight: bold; font-size: 14px;"
+            );
+            // Add the UID to the isolated set so UI can flash red
+            setIsolatedUsers(prev => new Set(prev).add(action.uid));
+            setSoarActions(prev => [...prev, action]);
+            return; // Don't process as a normal log
+          }
+
           if (data.pong) {
             if (data.stats) {
               setBackendStats(data.stats);
@@ -64,7 +94,9 @@ export function useAegisStream() {
               riskScore: data?.risk_score ?? data?.aegis_analysis?.risk_score ?? 0,
               aiSummary: data?.ai_analysis?.summary ?? data?.aegis_analysis?.summary ?? "",
               location: data?.location ?? "Global Mesh",
-              hourlyActivity: data?.hourlyActivity ?? []
+              hourlyActivity: data?.hourlyActivity ?? [],
+              // XAI: Real-time feature attribution from VAE reconstruction error
+              xai_top_features: data?.xai_top_features ?? [],
             };
 
             // Phase 1: Append to standard 75-limit array
@@ -105,5 +137,48 @@ export function useAegisStream() {
     return () => clearInterval(pingInterval);
   }, []);
 
-  return { anomalies, connectionStatus, isIntegrityVerified, merkleRoot, backendStats };
+  // ── SOAR: One-call helper to isolate a host from any component ─────
+  // Usage:  const { isolateHost } = useAegisStream();
+  //         onClick={() => isolateHost("emp_0031")}
+  const isolateHost = useCallback(async (uid: string) => {
+    const wsHost = window.location.hostname || "127.0.0.1";
+    try {
+      const res = await fetch(`http://${wsHost}:8000/api/isolate/${uid}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      console.log("SOAR Isolate response:", data);
+      return data;
+    } catch (err) {
+      console.error("SOAR Isolate failed:", err);
+    }
+  }, []);
+
+  // ── SOAR: Helper to revoke access ──────────────────────────────────
+  const revokeAccess = useCallback(async (uid: string) => {
+    const wsHost = window.location.hostname || "127.0.0.1";
+    try {
+      const res = await fetch(`http://${wsHost}:8000/api/revoke/${uid}`, {
+        method: "POST",
+      });
+      const data = await res.json();
+      console.log("SOAR Revoke response:", data);
+      return data;
+    } catch (err) {
+      console.error("SOAR Revoke failed:", err);
+    }
+  }, []);
+
+  return {
+    anomalies,
+    connectionStatus,
+    isIntegrityVerified,
+    merkleRoot,
+    backendStats,
+    // SOAR exports
+    isolatedUsers,
+    soarActions,
+    isolateHost,
+    revokeAccess,
+  };
 }

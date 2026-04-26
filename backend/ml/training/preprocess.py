@@ -73,11 +73,11 @@ if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
 # ═══════════════════════════════════════════════════════════════════════════
 
 ROOT          = Path(__file__).parent
-JSONL_PATH    = ROOT / "enterprise_activity_stream.jsonl"
-TRAIN_TENSOR  = ROOT / "train_tensor.pt"
-TEST_TENSOR   = ROOT / "test_tensor.pt"
-TEST_SESSIONS = ROOT / "test_anomalies.jsonl"
-META_PATH     = ROOT / "feature_meta.json"
+JSONL_PATH    = ROOT.parent.parent / "data" / "enterprise_activity_stream.jsonl"
+TRAIN_TENSOR  = ROOT.parent / "data" / "train_tensor.pt"
+TEST_TENSOR   = ROOT.parent / "data" / "test_tensor.pt"
+TEST_SESSIONS = ROOT.parent / "data" / "test_anomalies.jsonl"
+META_PATH     = ROOT.parent / "data" / "feature_meta.json"
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -100,6 +100,13 @@ USER_GROUPS = [
 LOCATIONS          = ["Pune", "Bangalore", "Mumbai", "Singapore", "Unknown"]
 SENSITIVITY_LEVELS = ["Public", "Internal", "Confidential", "PII_RESTRICTED"]
 MFA_STATES         = ["success", "failed", "bypassed"]
+
+# City coordinates for Haversine impossible-travel velocity
+CITY_COORDS = {
+    "Pune": (18.52, 73.86), "Bangalore": (12.97, 77.59),
+    "Mumbai": (19.08, 72.88), "Singapore": (1.35, 103.82),
+    "Unknown": (0.0, 0.0),
+}
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -266,10 +273,34 @@ def main() -> None:
         df["file_entropy"] > 0.95
     ).astype(np.float32)
 
+    # ── IMPOSSIBLE TRAVEL VELOCITY (Haversine, km/s) ─────────────────
+    # For each log, compute the geo-velocity from the PREVIOUS log in
+    # the same session.  If two consecutive logs come from different
+    # cities, the velocity = haversine_km / delta_seconds.
+    # Normal humans max out at ~0.3 km/s (commercial jet).
+    def _haversine_km(lat1d, lon1d, lat2d, lon2d):
+        lat1, lon1, lat2, lon2 = map(math.radians, [lat1d, lon1d, lat2d, lon2d])
+        dlat, dlon = lat2 - lat1, lon2 - lon1
+        a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+        return 6371.0 * 2 * math.asin(math.sqrt(a))
+
+    travel_vels = []
+    for _, grp in df.groupby("session_id"):
+        max_vel = 0.0
+        locs = grp["location"].tolist()
+        times = grp["ts"].tolist()
+        for i in range(1, len(locs)):
+            if locs[i] != locs[i-1] and locs[i] in CITY_COORDS and locs[i-1] in CITY_COORDS:
+                dt = max(abs((times[i] - times[i-1]).total_seconds()), 1.0)
+                km = _haversine_km(*CITY_COORDS[locs[i-1]], *CITY_COORDS[locs[i]])
+                max_vel = max(max_vel, km / dt)
+        travel_vels.extend([max_vel] * len(grp))
+    df["impossible_travel"] = np.array(travel_vels, dtype=np.float32)
+
     total_indicators = (len(ACTION_TYPES) + len(USER_GROUPS) +
                         len(SENSITIVITY_LEVELS) + len(LOCATIONS) +
-                        len(MFA_STATES) + 3 + 5)
-    print(f"      {total_indicators} indicator columns created (incl. 5 threat flags)")
+                        len(MFA_STATES) + 3 + 5 + 1)  # +1 for impossible_travel
+    print(f"      {total_indicators} indicator columns created (incl. 5 threat flags + travel vel)")
 
     # ──────────────────────────────────────────────────────────────────
     # STEP 5 — Velocity (intra-session time deltas)
@@ -313,6 +344,8 @@ def main() -> None:
         "flag_critical_resource": "max",
         "flag_optical_sensor":   "max",
         "flag_high_entropy":     "max",
+        # Impossible travel — max velocity in session
+        "impossible_travel":     "max",
     }
     # Categorical fractions / one-hot
     for a in ACTION_TYPES:
@@ -389,13 +422,15 @@ def main() -> None:
         + ["optical_det_mean", "edr_off_mean", "action_failed_mean"]
         # 🚩 Binary Threat Flags — MAX pooled (5)
         + THREAT_FLAGS
+        # Impossible travel velocity (1)
+        + ["impossible_travel_max"]
     )
 
     # Verify all features exist
     missing = [f for f in FEATURE_ORDER if f not in sess.columns]
     if missing:
         raise KeyError(f"Missing columns after aggregation: {missing}")
-    assert len(FEATURE_ORDER) == 61, f"Expected 61 features, got {len(FEATURE_ORDER)}"
+    assert len(FEATURE_ORDER) == 62, f"Expected 62 features, got {len(FEATURE_ORDER)}"
 
     feat = sess[FEATURE_ORDER].copy()
     print(f"      Feature vector: {len(FEATURE_ORDER)} dimensions ✓")

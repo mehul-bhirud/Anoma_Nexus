@@ -6,15 +6,17 @@ from pathlib import Path
 import math
 
 ROOT = Path(__file__).parent
-TRAIN_TENSOR_PATH = ROOT / "train_tensor.pt"
-TEST_TENSOR_PATH = ROOT / "test_tensor.pt"
-MODEL_PATH = ROOT / "aegis_vae_model_weighted.pth"
+DATA_DIR = ROOT.parent / "data"
+TRAIN_TENSOR_PATH = DATA_DIR / "train_tensor.pt"
+TEST_TENSOR_PATH = DATA_DIR / "test_tensor.pt"
+MODEL_PATH = ROOT.parent / "models" / "aegis_vae_model_weighted.pth"
 
-INPUT_DIM = 61
-LATENT_DIM = 10
-EPOCHS = 75
+INPUT_DIM  = 64
+LATENT_DIM = 10             # Restored: IForest requires tight Gaussian manifold
+EPOCHS     = 75
 BATCH_SIZE = 256
-LR = 3e-4
+LR         = 3e-4           # Restored
+BETA_MAX   = 1.0            # Restored: KL divergence is critical for IForest
 
 class VariationalAutoencoder(nn.Module):
     def __init__(self, input_dim=INPUT_DIM, latent_dim=LATENT_DIM):
@@ -58,10 +60,10 @@ def weighted_mse_loss(recon_x, x):
         sq_error[:, idx] *= weight_multiplier
     return sq_error.mean()
 
-def vae_loss_function(recon_x, x, mu, logvar):
+def vae_loss_function(recon_x, x, mu, logvar, beta=1.0):
     recon_loss = weighted_mse_loss(recon_x, x)
     kl_loss = -0.5 * torch.mean(1 + logvar - mu.pow(2) - logvar.exp())
-    return recon_loss + kl_loss
+    return recon_loss + beta * kl_loss
 
 @torch.no_grad()
 def get_avg_weighted_mse(model, tensor):
@@ -98,21 +100,23 @@ def main():
     model = VariationalAutoencoder().to(device)
     optimizer = optim.Adam(model.parameters(), lr=LR)
 
-    print(f"[*] Training Model for {EPOCHS} Epochs...")
+    anneal_epochs = max(1, EPOCHS // 4)  # beta ramps over first 25%
+    print(f"[*] Training Model for {EPOCHS} Epochs (beta-annealing to {BETA_MAX})...")
     model.train()
     for epoch in range(1, EPOCHS + 1):
+        beta = min(BETA_MAX, BETA_MAX * epoch / anneal_epochs)
         total_loss = 0
         for batch_idx, (data,) in enumerate(train_loader):
             data = data.to(device)
             optimizer.zero_grad()
             recon_batch, mu, logvar = model(data)
-            loss = vae_loss_function(recon_batch, data, mu, logvar)
+            loss = vae_loss_function(recon_batch, data, mu, logvar, beta=beta)
             loss.backward()
             optimizer.step()
             total_loss += loss.item()
         
         if epoch % 10 == 0 or epoch == 1:
-            print(f"    Epoch {epoch:>3}/{EPOCHS} -> Loss: {total_loss/len(train_loader):.4f}")
+            print(f"    Epoch {epoch:>3}/{EPOCHS} -> Loss: {total_loss/len(train_loader):.4f}  beta={beta:.3f}")
 
     print("\n[*] Training Complete. Verifying Data Separation...")
     train_mse = get_avg_weighted_mse(model, train_tensor)

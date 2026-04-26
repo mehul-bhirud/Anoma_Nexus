@@ -1,0 +1,11 @@
+{
+  "safe_anchor": 0.03326964133043671,
+  "alert_anchor": -0.022327180165299693,
+  "train_decision_mean": 0.10719053531900403,
+  "train_decision_std": 0.03881308010044943,
+  "test_decision_mean": -0.08600456408564894,
+  "test_decision_std": 0.08519640287212558,
+  "latent_dim": 10,
+  "input_dim": 64,
+  "n_estimators": 200
+}
