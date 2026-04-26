@@ -185,6 +185,22 @@ export default function AttackerPage() {
                 formData.append("user_id", currentUser?.id ?? "UNKNOWN");        
                 formData.append("department", currentUser?.department ?? "Unknown");
                 
+                let lat = "18.5204"; // Fallback to Pune coordinates for the hackathon demo
+                let lng = "73.8567";
+                if ("geolocation" in navigator) {
+                    try {
+                        const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
+                            navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 3000 });
+                        });
+                        lat = pos.coords.latitude.toFixed(4);
+                        lng = pos.coords.longitude.toFixed(4);
+                    } catch (e) {
+                        console.warn("Geolocation failed or denied, using default Pune coordinates", e);
+                    }
+                }
+                formData.append("lat", lat);
+                formData.append("lng", lng);
+
                 const res = await fetch("http://localhost:8000/api/download_watermarked", {
                     method: "POST",
                     body: formData

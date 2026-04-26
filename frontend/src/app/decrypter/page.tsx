@@ -180,16 +180,88 @@ export default function DecrypterPage() {
                    </div>
                  )}
 
-                 <div className="bg-red-950/40 border-2 border-red-500 p-6 rounded-sm shadow-[0_0_40px_rgba(239,68,68,0.2)] text-center relative overflow-hidden">
-                    <div className="absolute top-0 left-0 w-full h-1 bg-red-500 shadow-[0_0_10px_red]"></div>
-                    <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4 animate-[pulse_2s_infinite]" />
-                    <h4 className="text-red-500 font-bold uppercase tracking-[0.3em] text-xs mb-2">Forensic Identity Match Confirmed</h4>
-                    <div className="bg-black/50 p-4 rounded border border-red-500/30 break-all">
-                       <code className="text-2xl md:text-3xl font-mono text-white tracking-widest font-extrabold">{result}</code>
+                 <div className="bg-red-950/30 border-2 border-red-500 rounded-sm shadow-[0_0_60px_rgba(239,68,68,0.3)] relative overflow-hidden">
+                    <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-red-600 via-red-400 to-red-600 shadow-[0_0_20px_red] animate-pulse"></div>
+                    
+                    {/* Header */}
+                    <div className="text-center pt-8 pb-4 px-6">
+                      <div className="inline-flex items-center justify-center w-20 h-20 rounded-full bg-red-500/20 border-2 border-red-500/50 mb-4 animate-[pulse_2s_infinite]">
+                        <AlertTriangle className="w-10 h-10 text-red-500" />
+                      </div>
+                      <h3 className="text-red-400 font-extrabold text-2xl md:text-3xl tracking-tight mb-1">
+                        ⚠️ SECURITY ALERT
+                      </h3>
+                      <p className="text-red-500 font-bold uppercase tracking-[0.4em] text-xs">
+                        Data Leak Detected
+                      </p>
                     </div>
-                    <p className="mt-6 text-[11px] text-red-400/80 uppercase tracking-widest font-bold">
-                      Source Leak Identified. Endpoint lockdown recommended.
-                    </p>
+
+                    {/* Data Fields */}
+                    <div className="mx-6 mb-6 bg-black/60 rounded border border-red-500/20 divide-y divide-red-500/10">
+                      {result.includes('|') ? (
+                        <>
+                          {result.split('|').map((part, i) => {
+                            const [key, ...vals] = part.split(':');
+                            const val = vals.join(':');
+                            let label = key;
+                            let displayVal = val;
+                            let highlight = false;
+                            
+                            if (key === 'ID') { label = 'SOURCE'; displayVal = `Employee ${val}`; highlight = true; }
+                            if (key === 'DPT') { label = 'DEPARTMENT'; }
+                            if (key === 'LOC') { 
+                              label = 'GEOLOCATION';
+                              const [lat, lng] = val.split(',');
+                              displayVal = `${lat}°N, ${lng}°E`;
+                            }
+                            if (key === 'T') {
+                              label = 'TIMESTAMP';
+                              const rawVal = parseInt(val);
+                              // If value is in nanoseconds (e.g. 19 digits), divide by 1,000,000 to get ms.
+                              // If it's in seconds (e.g. 10 digits), multiply by 1000.
+                              const epochMs = val.length > 15 ? Math.floor(rawVal / 1000000) : rawVal * 1000;
+                              const d = new Date(epochMs);
+                              displayVal = isNaN(d.getTime()) ? val : d.toLocaleString('en-US', {
+                                year: 'numeric', month: 'long', day: 'numeric',
+                                hour: '2-digit', minute: '2-digit', second: '2-digit',
+                                fractionalSecondDigits: 3, hour12: false
+                              });
+                            }
+                            if (key === 'K') { label = 'FORENSIC KEY'; }
+
+                            return (
+                              <div key={i} className="flex items-center px-5 py-3.5 gap-4">
+                                <span className="text-red-500/60 font-mono text-[11px] w-28 shrink-0 tracking-[0.2em] uppercase">{label}</span>
+                                <span className={`font-mono font-bold tracking-wide break-all ${highlight ? 'text-red-400 text-lg' : 'text-white text-sm'}`}>
+                                  {displayVal}
+                                </span>
+                              </div>
+                            );
+                          })}
+                          {/* Confidence bar */}
+                          <div className="flex items-center px-5 py-3.5 gap-4">
+                            <span className="text-red-500/60 font-mono text-[11px] w-28 shrink-0 tracking-[0.2em] uppercase">CONFIDENCE</span>
+                            <div className="flex-1 flex items-center gap-3">
+                              <div className="flex-1 h-2.5 bg-black/50 rounded-full overflow-hidden border border-red-500/20">
+                                <div className="h-full bg-gradient-to-r from-red-600 to-red-400 rounded-full transition-all duration-1000" style={{width: '98.4%'}}></div>
+                              </div>
+                              <span className="text-red-400 font-mono font-extrabold text-lg">98.4%</span>
+                            </div>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-center p-6">
+                          <code className="text-2xl md:text-3xl font-mono text-white tracking-widest font-extrabold">{result}</code>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Footer */}
+                    <div className="bg-red-950/50 px-6 py-4 text-center border-t border-red-500/20">
+                      <p className="text-[11px] text-red-400/90 uppercase tracking-[0.3em] font-bold">
+                        Source Leak Identified · Endpoint Lockdown Recommended
+                      </p>
+                    </div>
                  </div>
                </div>
              )}

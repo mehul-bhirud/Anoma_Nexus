@@ -26,6 +26,7 @@ const navItems = [
   { href: "/geospatial", icon: Globe, label: "Geospatial", short: "GEO" },
   { href: "/response", icon: ShieldAlert, label: "Response", short: "RES" },
   { href: "/access", icon: Lock, label: "Access IAM", short: "IAM" },
+  { href: "/encoder", icon: Shield, label: "Admin Encoder", short: "ENC" },
   { href: "/decrypter", icon: Scan, label: "Decrypter", short: "ACT" },
   { href: "/attacker", icon: Terminal, label: "Attacker Sim", short: "SIM" },
 ];
